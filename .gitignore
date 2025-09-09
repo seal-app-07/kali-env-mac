@@ -1,0 +1,11 @@
+
+# >>> vm-kit
+vm/**/Logs/
+vm/**/ProofShots/
+# Secrets
+*.ovpn
+# Big/host-specific
+*.vmx
+*.vmwarevm/
+*.iso
+# <<< vm-kit
