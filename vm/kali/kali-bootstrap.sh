@@ -86,7 +86,35 @@ main(){
     xfce4-terminal firefox-esr \
     resolvconf openvpn \
     scrot imagemagick
-  ok "Base packages installed (Firefox ESR, scrot, ImageMagick included)"
+
+
+  step "Install VS Code (Deb822 .sources, normalized keyring)"
+  install -d -m 0755 /etc/apt/keyrings
+  if [ ! -f /etc/apt/keyrings/microsoft.gpg ]; then
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/keyrings/microsoft.gpg
+    chmod 0644 /etc/apt/keyrings/microsoft.gpg
+  fi
+
+  # 旧式や重複定義を掃除
+  rm -f /etc/apt/sources.list.d/vscode.list 2>/dev/null || true
+  sed -i -E 's#^(deb .*packages.microsoft.com/repos/code .*)#\# \1#g' \
+    /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+
+  # Deb822形式で正規化（毎回上書きOK）
+  cat >/etc/apt/sources.list.d/vscode.sources <<'SRC'
+Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64 arm64 armhf
+Signed-By: /etc/apt/keyrings/microsoft.gpg
+SRC
+  apt update -qq || true
+  apt install -y code || true
+  ok "VS Code installed (Deb822 .sources)"
+
+  ok "Base packages installed (Firefox ESR, scrot, ImageMagick, VSCode included)"
+
 
   if [ "${SKIP_FULL:-0}" != "1" ]; then
     step "Installing Desktop & common Kali tools (kali-desktop-xfce, kali-linux-default)"
@@ -130,7 +158,7 @@ EOC
 
   if [ -n "$MAIN_HOME" ]; then
     install -d -m 0755 "$MAIN_HOME/.config" "$MAIN_HOME/.local/bin"
-    # --- IME 起動（.xprofile を生成/更新）。※ .Xmodmap は読み込まない ---
+    # --- IME autostart in .xprofile ---
     if ! grep -q 'fcitx5 -dr' "$MAIN_HOME/.xprofile" 2>/dev/null; then
       cat >>"$MAIN_HOME/.xprofile" <<'XPROF'
 # --- IM (fcitx5) ---
@@ -142,22 +170,14 @@ XPROF
       chown "$MAIN_USER":"$MAIN_USER" "$MAIN_HOME/.xprofile"
       chmod 0644 "$MAIN_HOME/.xprofile"
     fi
-    # 旧版で仕込んだ xmodmap 呼び出し行を削除（Caps→全/半角 無効化）
-    if [ -f "$MAIN_HOME/.xprofile" ]; then
-      sed -i '/xmodmap .*\.Xmodmap/d' "$MAIN_HOME/.xprofile" || true
-      chown "$MAIN_USER":"$MAIN_USER" "$MAIN_HOME/.xprofile" || true
-    fi
-    # 旧版が作成した .Xmodmap を安全に撤去
-    if [ -f "$MAIN_HOME/.Xmodmap" ] && grep -q 'keycode 66.*Zenkaku_Hankaku' "$MAIN_HOME/.Xmodmap"; then
-      rm -f "$MAIN_HOME/.Xmodmap"
-    fi
-    # fcitx5 を既定IMに
+    sed -i '/xmodmap .*\.Xmodmap/d' "$MAIN_HOME/.xprofile" 2>/dev/null || true
+    [ -f "$MAIN_HOME/.Xmodmap" ] && rm -f "$MAIN_HOME/.Xmodmap"
     su - "$MAIN_USER" -c 'im-config -n fcitx5 >/dev/null 2>&1 || true'
   fi
-  ok "IME configured (Caps切替は無効、Ctrl+Spaceのみ)"
+  ok "IME configured (Ctrl+Space only)"
 
-  # ---------- E. Cmd風ショートカット（端末内） ----------
-  step "Enabling Cmd-like shortcuts in terminals (Cmd→Ctrl(+Shift) mapping)"
+  # ---------- E. Cmd-like shortcuts（xbindkeys） ----------
+  step "Enabling Cmd-like shortcuts in terminals (Cmd→Ctrl(+Shift)/Alt mapping)"
   if [ -n "$MAIN_HOME" ]; then
     install -d -m 0755 "$MAIN_HOME/.config/autostart"
     install -d -m 0755 "$MAIN_HOME/.local/bin"
@@ -167,7 +187,8 @@ xdotool key --clearmodifiers ctrl+shift+c || xdotool key --clearmodifiers ctrl+c
 SH
     cat >"$MAIN_HOME/.local/bin/_cmd_paste.sh" <<'SH'
 #!/usr/bin/env bash
-xdotool key --clearmodifiers ctrl+shift+v || xdotool key --clearmodifiers ctrl+v
+# Alt+v (tmux paste-buffer) → ダメなら Ctrl+Shift+v
+xdotool key --clearmodifiers alt+v || xdotool key --clearmodifiers ctrl+shift+v
 SH
     chmod +x "$MAIN_HOME/.local/bin/"_cmd_*.sh
     chown -R "$MAIN_USER":"$MAIN_USER" "$MAIN_HOME/.local"
@@ -200,7 +221,7 @@ DESK
   fi
   ok "Cmd-like shortcuts enabled (relogin/reboot to activate)"
 
-  # ---------- F. VMware 共有フォルダ ~/Shared ----------
+  # ---------- F. VMware Shared folder helper ----------
   step "Adding shared folder helper (vmhgfs-fuse -> ~/Shared)"
   cat >/usr/local/bin/mount-hgfs <<'HG'
 #!/usr/bin/env bash
@@ -217,9 +238,9 @@ fi
 echo "[+] mounted to $MP"
 HG
   chmod +x /usr/local/bin/mount-hgfs
-  ok "mount-hgfs ready (use: mount-hgfs  # -> ~/Shared)"
+  ok "mount-hgfs ready (use: mount-hgfs)"
 
-  # ---------- G. XDG英語化 & 日本語名ディレクトリ移行 ----------
+  # ---------- G. XDG English dirs & JP migration ----------
   step "Enforcing English XDG user directories and migrating JP folders"
   if [ -n "$MAIN_HOME" ]; then
     install -d -o "$MAIN_USER" -g "$MAIN_USER" "$MAIN_HOME/.config"
@@ -256,7 +277,7 @@ XDG
   fi
   ok "XDG dirs normalized"
 
-  # ---------- H. initramfs safety: plymouth を無害化（任意） ----------
+  # ---------- H. initramfs safety (optional) ----------
   if [ "${SKIP_PLYMOUTH_DIVERT:-0}" != "1" ] && [ -d /usr/share/initramfs-tools/hooks ]; then
     step "Applying plymouth hook divert (prevent initramfs failures)"
     if [ -f /usr/share/initramfs-tools/hooks/plymouth ] && \
@@ -279,8 +300,8 @@ STUB
     note "SKIP_PLYMOUTH_DIVERT=1 -> skipping plymouth divert"
   fi
 
-  # ---------- I. tmux（好みの設定+プラグイン） ----------
-  step "Configuring tmux (prefix C-a, vi-mode, **Ctrl-a h/v split**) & plugins"
+  # ---------- I. tmux（設定+プラグイン） ----------
+  step "Configuring tmux (prefix C-a, vi-mode, clipboard, h/v split) & plugins"
   apt install -y --no-install-recommends git tmux xclip
 
   configure_tmux_for(){
@@ -314,6 +335,27 @@ bind r source-file ~/.tmux.conf \; display-message "$HOME/.tmux.conf reloaded!"
 bind -T copy-mode-vi 'v' send-keys -X begin-selection
 
 # ---------------------------------------------------------------------------- #
+# clipboard & paste (robust on VMs)
+# ---------------------------------------------------------------------------- #
+set -g set-clipboard on
+
+# copy-mode-vi: 'y' と 'Enter' でXクリップボードへ
+unbind -T copy-mode-vi y
+bind   -T copy-mode-vi y      send-keys -X copy-pipe-and-cancel "xclip -selection clipboard -in"
+bind   -T copy-mode-vi Enter  send-keys -X copy-pipe-and-cancel "xclip -selection clipboard -in"
+
+# mouse drag end -> クリップボードへ（再掲）
+bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "xclip -selection clipboard -in"
+
+# paste: Alt/Meta+v, Ctrl+Shift+V, Shift+Insert
+bind -n M-v       paste-buffer
+bind -n C-S-v     paste-buffer
+bind -n S-Insert  paste-buffer
+
+# paste: Ctrl+V（VMが Cmd+V→Ctrl+V に変換するケースを吸収）
+bind -n C-v run-shell 'tmux set-buffer -- "$(xclip -o -selection clipboard 2>/dev/null || printf "")"; tmux paste-buffer'
+
+# ---------------------------------------------------------------------------- #
 # plugins
 # ---------------------------------------------------------------------------- #
 set -g @plugin 'tmux-plugins/tpm'
@@ -332,7 +374,6 @@ run '~/.tmux/plugins/tpm/tpm'
 # ---------------------------------------------------------------------------- #
 unbind -T prefix h
 bind   -T prefix h split-window -h
-
 unbind -T prefix v
 bind   -T prefix v split-window -v
 TMUXRC
@@ -354,7 +395,7 @@ TMUXRC
   if [ -n "$MAIN_HOME" ]; then
     configure_tmux_for "$MAIN_USER" "$MAIN_HOME"
   fi
-  ok "tmux configured (Ctrl-a h/v で分割)"
+  ok "tmux configured (clipboard, Alt+v paste, C-a h/v split)"
 
   # ---------- J. OpenVPN helpers ----------
   step "Installing OpenVPN helpers (vpn-up/down/ip/mtu)"
@@ -409,28 +450,16 @@ OVPNMTU
   chmod +x /usr/local/bin/vpn-mtu
   ok "OpenVPN helpers installed"
 
-  # ---------- K. proofshot（新規） ----------
+  # ---------- K. proofshot ----------
   step "Installing proofshot command"
   cat >/usr/local/bin/proofshot <<'PFS'
 #!/usr/bin/env bash
-# proofshot: quick screenshot helper with optional overlays (time/IP/label/file)
 set -euo pipefail
-
 usage(){
 cat <<'USG'
 Usage: proofshot [--full|--region|--window] [--outdir DIR] [--iface IFACE] [--label TEXT] [--file PATH]
-  --full      : full screen (default)
-  --region    : interactively select a region
-  --window    : active window
-  --outdir DIR: output directory (default: $XDG_SCREENSHOTS_DIR or ~/Pictures/Screenshots)
-  --iface IF  : pick IPv4 of given interface (e.g., tun0); else first non-loopback
-  --label TXT : append arbitrary text to overlay (e.g., target IP/host)
-  --file PATH : append first 256 bytes of the file (e.g., proof.txt/local.txt)
-Examples:
-  proofshot --region --file ~/proof.txt --iface tun0 --label target-10.10.10.10
 USG
 }
-
 MODE="full"; OUTDIR="${XDG_SCREENSHOTS_DIR:-$HOME/Pictures/Screenshots}"; IFACE=""; LABEL=""; PFILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -445,51 +474,63 @@ while [ $# -gt 0 ]; do
     *) echo "[!] Unknown option: $1"; usage; exit 2;;
   esac
 done
-
 mkdir -p "$OUTDIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="$OUTDIR/proof-$STAMP.png"
-
-# Pick IPv4
 if [ -n "$IFACE" ]; then
   IP4="$(ip -4 -o addr show dev "$IFACE" 2>/dev/null | awk '{print $4}' | head -n1)"
 else
   IP4="$(ip -4 -o addr | awk '!/ lo /{print $4}' | head -n1)"
 fi
-
-# Build overlay text
-OVER="time: $(date -Iseconds)"
-[ -n "$IP4" ] && OVER="$OVER | ip: $IP4"
-[ -n "$LABEL" ] && OVER="$OVER | $LABEL"
-if [ -n "$PFILE" ] && [ -r "$PFILE" ]; then
-  CONTENT="$(tr -d '\r' < "$PFILE" | head -c 256)"
-  OVER="$OVER | $(basename "$PFILE"): $CONTENT"
-fi
-
-# Capture
-case "$MODE" in
-  region) scrot -s "$OUT" ;;
-  window) scrot -u "$OUT" ;;
-  *)      scrot "$OUT" ;;
-esac
-
-# Annotate (ImageMagick: convert or magick)
+OVER="time: $(date -Iseconds)"; [ -n "$IP4" ] && OVER="$OVER | ip: $IP4"; [ -n "$LABEL" ] && OVER="$OVER | $LABEL"
+if [ -n "$PFILE" ] && [ -r "$PFILE" ]; then CONTENT="$(tr -d '\r' < "$PFILE" | head -c 256)"; OVER="$OVER | $(basename "$PFILE"): $CONTENT"; fi
+case "$MODE" in region) scrot -s "$OUT" ;; window) scrot -u "$OUT" ;; *) scrot "$OUT" ;; esac
 if command -v convert >/dev/null 2>&1; then
   convert "$OUT" -gravity SouthEast -fill white -undercolor '#00000080' -pointsize 16 -annotate +10+10 "$OVER" "$OUT"
 elif command -v magick >/dev/null 2>&1; then
   magick "$OUT" -gravity SouthEast -fill white -undercolor '#00000080' -pointsize 16 -annotate +10+10 "$OVER" "$OUT"
 fi
-
 echo "[+] saved: $OUT"
 PFS
   chmod +x /usr/local/bin/proofshot
-  ok "proofshot installed (try: proofshot --help)"
+  ok "proofshot installed"
 
-  # ---------- L. 旧tmux系の掃除 ----------
+  # ---------- L. Cleanup legacy ----------
   step "Cleaning up legacy tmux scripts (if any)"
   rm -f /usr/local/bin/*tmux*.sh || true
 
-  # ---------- M. 完了 ----------
+  # ---------- M. ~/.zshrc に自動追記（tmux自動起動 & BP無効化） ----------
+  if [ -n "$MAIN_HOME" ]; then
+    step "Injecting ~/.zshrc snippets (auto-tmux & disable bracketed paste)"
+    ZSHRC="$MAIN_HOME/.zshrc"
+    touch "$ZSHRC" && chown "$MAIN_USER":"$MAIN_USER" "$ZSHRC"
+
+    su - "$MAIN_USER" -c "grep -q 'auto-start tmux safely' '$ZSHRC' || cat >>'$ZSHRC' <<'ZRC'
+# --- [ZSH] auto-start tmux safely -------------------------------------------
+if [ -n \"\$PS1\" ] && [ -z \"\$TMUX\" ] && [ -t 0 ]; then
+  case \"\$TERM_PROGRAM\" in
+    \"vscode\"|\"JetBrains\") : ;;
+    *)
+      if [ -z \"\$SSH_TTY\" ]; then
+        TMUX_SESSION=\"\${TMUX_SESSION:-works}\"
+        tmux has-session -t \"\$TMUX_SESSION\" 2>/dev/null && exec tmux attach -t \"\$TMUX_SESSION\"
+        exec tmux new -s \"\$TMUX_SESSION\"
+      fi
+    ;;
+  esac
+fi
+
+# --- [ZSH] disable terminal's bracketed paste mode --------------------------
+disable_bracketed_paste() { printf '\e[?2004l'; }
+autoload -Uz add-zsh-hook 2>/dev/null || true
+add-zsh-hook precmd disable_bracketed_paste
+add-zsh-hook preexec disable_bracketed_paste
+zle -N bracketed-paste self-insert 2>/dev/null || true
+ZRC"
+    ok "~/.zshrc updated (auto tmux + BP off)"
+  fi
+
+  # ---------- N. 完了 ----------
   echo
   ok "Bootstrap complete."
   echo "  - Reboot or re-login recommended (IME/xbindkeys autostart)"

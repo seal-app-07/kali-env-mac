@@ -1,10 +1,24 @@
-# ==== safe tmux attach (interactive shells only) ====
-if [[ $- == *i* ]] && command -v tmux >/dev/null 2>&1; then
-  if ! tmux has-session -t works 2>/dev/null; then
-    tmux new -ds works
-  fi
-  [ -z "$TMUX" ] && tmux attach -t works
+# ==== safe tmux auto-attach (interactive ONLY; skip VSCode/JetBrains/SSH) ====
+if [ -n "$PS1" ] && [ -z "$TMUX" ] && [ -t 0 ]; then
+  case "$TERM_PROGRAM" in
+    "vscode"|"JetBrains") : ;;
+    *)
+      if [ -z "$SSH_TTY" ] && command -v tmux >/dev/null 2>&1; then
+        TMUX_SESSION="${TMUX_SESSION:-works}"
+        tmux has-session -t "$TMUX_SESSION" 2>/dev/null \
+          && exec tmux attach -t "$TMUX_SESSION"
+        exec tmux new -s "$TMUX_SESSION"
+      fi
+    ;;
+  esac
 fi
+
+# ---- Disable Bracketed Paste mode globally in zsh ----
+disable_bracketed_paste() { printf '\e[?2004l'; }
+autoload -Uz add-zsh-hook 2>/dev/null || true
+add-zsh-hook precmd disable_bracketed_paste
+add-zsh-hook preexec disable_bracketed_paste
+zle -N bracketed-paste self-insert 2>/dev/null || true
 
 
 
@@ -86,7 +100,6 @@ if [ ! -f /root/.kali_bootstrapped ]; then
     chisel sshuttle mitmproxy tcpdump \
     burpsuite openjdk-21-jre openvpn iputils-ping inetutils-traceroute netcat-traditional dnsutils
 
-  # Temurin 21（保険）
   mkdir -p /usr/share/keyrings
   if ! [ -f /usr/share/keyrings/adoptium.gpg ]; then
     curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg
@@ -94,13 +107,11 @@ if [ ! -f /root/.kali_bootstrapped ]; then
     apt update -qq || true; apt install -y temurin-21-jre || true
   fi
 
-  # Burp JAR（保険）
   [ -f /root/burpsuite-community.jar ] || curl -L -o /root/burpsuite-community.jar "https://portswigger.net/burp/releases/download?product=community&type=Jar" || true
 
   touch /root/.kali_bootstrapped
 fi
 
-# burp-light wrapper（プロファイル /mnt/burp-profile）
 cat >/usr/local/bin/burp-light <<'BURP_EOF'
 #!/bin/bash
 set -euo pipefail
@@ -117,7 +128,6 @@ exec "$JAVA" -Dswing.defaultlaf=javax.swing.plaf.nimbus.NimbusLookAndFeel \
 BURP_EOF
 chmod +x /usr/local/bin/burp-light
 
-# 保険: 素ネット復旧のミニタスク（実行は手動）
 cat >/usr/local/bin/net-repair <<'NR_EOF'
 #!/bin/bash
 set -e
@@ -126,12 +136,11 @@ printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" >/etc/resolv.conf
 echo "[+] routes/DNS refreshed"; ip route; cat /etc/resolv.conf
 NR_EOF
 chmod +x /usr/local/bin/net-repair
-# --- MTU/PMTU チューニング（VPN経由の遅延・タイムアウト回避） ---
+
 ip link set dev eth0 mtu 1500 2>/dev/null || true
 sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1 || true
 sysctl -w net.ipv4.ip_no_pmtu_disc=0   >/dev/null 2>&1 || true
 
-# 永続化（コンテナ内）
 mkdir -p /etc/sysctl.d
 cat >/etc/sysctl.d/99-mtu.conf <<'SYSCTL_EOF'
 net.ipv4.tcp_mtu_probing=1
@@ -171,14 +180,12 @@ ckali_rm_fn(){
   echo "[*] Done. ckali environment wiped."
 }
 
-# --- Kali の IP を eth0 から直接取得 ---
 _kali_ip() {
   container exec ckali-persist sh -lc \
     'ip -4 -o addr show eth0 2>/dev/null | awk "{print \$4}" | cut -d/ -f1' \
     2>/dev/null | head -n1
 }
 
-# --- utun の自動検出（10.x が付いてるもの） ---
 _vpn_utun() {
   ifconfig | awk '
     /^[[:alnum:]]/ { i=$1; sub(":","",i) }
@@ -186,50 +193,34 @@ _vpn_utun() {
   '
 }
 
-# --- pf のベース（順序厳守: options -> normalization -> translation -> filtering(anchors)） ---
 _ensure_pf_base() {
   sudo pfctl -E >/dev/null 2>&1 || true
   cat <<'EOF' | sudo pfctl -q -f -
 set skip on lo0
-
 scrub-anchor "com.apple/*"
-
 nat-anchor "com.apple/*"
 rdr-anchor "com.apple/*"
-
-# 我々のアンカーは translation の後で呼び出す
 nat-anchor "com.pentest.vpnshare"
 rdr-anchor "com.pentest.vpnshare"
 anchor "com.pentest.vpnshare"
 EOF
 }
 
-# --- OFF: 我々のアンカーを空にして、pf は維持（安全に戻す） ---
 vpn-share-off() {
   echo "[*] Flushing our anchor only..."
   sudo pfctl -q -a com.pentest.vpnshare -F all >/dev/null 2>&1 || true
-
-  # ベースのみ残す（Apple側アンカーは維持）
   cat <<'EOF' | sudo pfctl -q -f -
 set skip on lo0
-
 scrub-anchor "com.apple/*"
-
 nat-anchor "com.apple/*"
 rdr-anchor "com.apple/*"
-
 nat-anchor "com.pentest.vpnshare"
 rdr-anchor "com.pentest.vpnshare"
 anchor "com.pentest.vpnshare"
 EOF
-
-  # 転送は好みでOFF（ONのままでもOKならコメントアウト可）
-  # sudo sysctl -w net.inet.ip.forwarding=0 >/dev/null
-
   echo "[+] VPN sharing is OFF (pf stays enabled)."
 }
 
-# --- RESET: pf 全停止→デフォルトへ完全復旧（最終手段） ---
 vpn-share-reset() {
   echo "[*] Disabling pf & clearing rules..."
   sudo pfctl -d >/dev/null 2>&1 || true
@@ -238,45 +229,25 @@ vpn-share-reset() {
   echo "[+] pf reset complete."
 }
 
-# --- ON: NAT(utun) + rdr(utun:1234 -> KALI_IP:1234) [順序修正版] ---
 vpn-share-on() {
-  # 初期状態に戻す
   vpn-share-off
   vpn-share-reset
-
   local UTUN="$(_vpn_utun)"
-  if [ -z "$UTUN" ]; then
-    echo "[!] utun未検出。先にVPN接続してください"; return 1
-  fi
-
-  local KIP
-  if ! KIP="$(_kali_ip)"; then
-    echo "[!] Kali IP を特定できません。KALI_IP=192.168.64.x を指定して再実行してください"
-    return 1
-  fi
-
+  if [ -z "$UTUN" ]; then echo "[!] utun未検出。先にVPN接続してください"; return 1; fi
+  local KIP; if ! KIP="$(_kali_ip)"; then echo "[!] Kali IP 不明"; return 1; fi
   local RPORT="${VPN_RPORT:-1234}"
-  echo "[*] Using utun: $UTUN"
-  echo "[*] Kali IP  : $KIP"
-  echo "[*] Rdr Port : $RPORT"
-
+  echo "[*] Using utun: $UTUN"; echo "[*] Kali IP  : $KIP"; echo "[*] Rdr Port : $RPORT"
   _ensure_pf_base
-
-  # ★ ここが肝心：translation（rdr, nat）→ filtering（pass）の順
   cat <<EOF | sudo pfctl -q -a com.pentest.vpnshare -f -
 rdr pass on $UTUN inet proto tcp from any to ($UTUN) port $RPORT -> $KIP port $RPORT
 nat on $UTUN inet from 192.168.64.0/24 to any -> ($UTUN)
 pass out on $UTUN inet from 192.168.64.0/24 to any keep state
 EOF
-
   sudo sysctl -w net.inet.ip.forwarding=1 >/dev/null
-
   echo "[+] VPN sharing is ON via $UTUN"
   echo "[i] Kaliで:  nc -lvnp $RPORT"
-  echo "[i] Payload LHOST=あなたの $UTUN の inet(10.x.x.x), LPORT=$RPORT"
 }
 
-# --- rshell-open も同じ順序に修正（任意で使っている場合のみ差し替え） ---
 rshell-open(){
   local UTUN="$(_vpn_utun)"; [ -z "$UTUN" ] && { echo "[!] utun未検出"; return 1; }
   local KIP="$(_kali_ip)" RPORT="${VPN_RPORT:-1234}"; _ensure_pf_base
@@ -289,7 +260,6 @@ EOF
   echo "[+] rdr enabled ($UTUN:$RPORT -> $KIP:$RPORT)"
 }
 
-# --- STATUS: 一括確認 ---
 vpn-share-status() {
   echo "== main rules ==";      sudo pfctl -sr
   echo "== nat rules  ==";      sudo pfctl -sn
@@ -324,8 +294,8 @@ if [ -z "$ZSHRC_KALI_HINT_SHOWN" ]; then export ZSHRC_KALI_HINT_SHOWN=1; cat <<'
 - 全破棄:          ckali-rm
 - Burp:            burp-light（Kali内）
 - VPN共有 ON:      vpn-share-on   （utun NAT + rdr:1234）
-- VPN共有 OFF:     vpn-share-off  （pf停止/既定復帰）
-- pf 完全初期化:    vpn-share-reset / pf-panic-reset
+- VPN共有 OFF:     vpn-share-off
+- pf 完全初期化:    vpn-share-reset
 - Kaliネット復旧:   （Kali内） net-repair
 HINT
 fi
