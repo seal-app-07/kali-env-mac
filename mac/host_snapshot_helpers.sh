@@ -2,7 +2,7 @@
 # mac/host_snapshot_helpers.sh — macOS host snapshot helper
 set -euo pipefail
 
-OUTBASE="${OUTBASE:-$HOME/pentest/Kali-Host-Snapshots}"
+OUTBASE="${OUTBASE:-$HOME/pentest/vm/Kali-Host-Snapshots}"
 SHARED_ROOT="${$HOME/pentest/vm/share/kali}"
 TS="$(date +'%Y%m%d-%H%M%S')"
 mkdir -p "$OUTBASE"

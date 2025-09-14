@@ -282,8 +282,8 @@ return {
     -- Copy/Paste
     -- { key = "c", mods = "SUPER",      action = act.CopyTo  "Clipboard" },
     -- { key = "v", mods = "SUPER",      action = act.PasteFrom "Clipboard" },
-    { key = "c", mods = "CTRL", action = act.CopyTo  "Clipboard" },
-    { key = "v", mods = "CTRL", action = act.PasteFrom "Clipboard" },
+    { key = "c", mods = "CTRL|SHIFT", action = act.CopyTo  "Clipboard" },
+    { key = "v", mods = "CTRL|SHIFT", action = act.PasteFrom "Clipboard" },
 
     -- Split: Ctrl+H (horizontal), Ctrl+V (vertical)  ← ご指定どおり
     { key = "h",         mods = "CTRL", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } },
@@ -348,7 +348,7 @@ PFS
 
   echo; ok "Bootstrap complete."
   echo "  - Relogin recommended (IME/xbindkeys)"
-  echo "  - WezTerm keys: Ctrl+C/V,  Ctrl+H (horizontal), Ctrl+B (vertical)"
+  echo "  - WezTerm keys: Ctrl+Shift+C/V,  Ctrl+H (horizontal), Ctrl+B (vertical)"
 }
 
 main "$@"
