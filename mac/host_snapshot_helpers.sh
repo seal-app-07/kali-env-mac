@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# vm/mac/host_snapshot_helpers.sh — macOS host snapshot helper
+# mac/host_snapshot_helpers.sh — macOS host snapshot helper
 set -euo pipefail
 
-OUTBASE="${OUTBASE:-$HOME/pentest/vm/Kali-Host-Snapshots}"
+OUTBASE="${OUTBASE:-$HOME/pentest/Kali-Host-Snapshots}"
 SHARED_ROOT="${$HOME/pentest/vm/share/kali}"
 TS="$(date +'%Y%m%d-%H%M%S')"
 mkdir -p "$OUTBASE"
 
-pick_shared(){
+pick_shared(){F
   # 共有フォルダ（1つでも見つかれば使う）
   if [ -d "$SHARED_ROOT" ]; then
     # 最初の共有を選択（環境に応じて変更可）

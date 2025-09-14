@@ -1,7 +1,7 @@
 
 # >>> vm-kit
-vm/**/Logs/
-vm/**/ProofShots/
+**/Logs/
+**/ProofShots/
 # Secrets
 *.ovpn
 # Big/host-specific
