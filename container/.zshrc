@@ -1,36 +1,127 @@
-# ==== safe tmux auto-attach (interactive ONLY; skip VSCode/JetBrains/SSH) ====
-if [ -n "$PS1" ] && [ -z "$TMUX" ] && [ -t 0 ]; then
-  case "$TERM_PROGRAM" in
-    "vscode"|"JetBrains") : ;;
-    *)
-      if [ -z "$SSH_TTY" ] && command -v tmux >/dev/null 2>&1; then
-        TMUX_SESSION="${TMUX_SESSION:-works}"
-        tmux has-session -t "$TMUX_SESSION" 2>/dev/null \
-          && exec tmux attach -t "$TMUX_SESSION"
-        exec tmux new -s "$TMUX_SESSION"
-      fi
-    ;;
-  esac
-fi
+# =====================================================================
+# ~/.zshrc — macOS 専用
+#   - WezTerm 設定を自動生成（~/.wezterm.lua と ~/.config/wezterm/wezterm.lua）
+#   - 自動起動なし。分割: Ctrl+h(水平) / Ctrl+v(垂直) ※Ctrl+Backspace=水平
+#   - Cmd+C/Cmd+V コピー/ペースト
+#   - 見た目: Tokyo Night Storm + 半透明 + ブラー + タイトルバー表示
+#   - zsh カラー強化: syntax-highlighting / autosuggestions（在れば）
+#   - 使い勝手: カラープロンプト（Git 情報）、Bracketed Paste 無効化
+#   - Kali コンテナ環境ヘルパー（ckali / vpn-share-* など）
+#   - tmux 自動起動は無効（スニペットはコメントで残置）
+# =====================================================================
 
-# ---- Disable Bracketed Paste mode globally in zsh ----
+##### ---- PATHs ----
+export PATH="$PATH:/opt/homebrew/opt/openvpn/sbin:/opt/X11/bin:/opt/homebrew/bin"
+
+# ==== safe tmux auto-attach (interactive ONLY; skip VSCode/JetBrains/SSH) ====
+# 【Macでは tmux 自動起動は無効】
+# if [ -n "$PS1" ] && [ -z "$TMUX" ] && [ -t 0 ]; then
+#   case "$TERM_PROGRAM" in
+#     "vscode"|"JetBrains") : ;;
+#     *)
+#       if [ -z "$SSH_TTY" ] && command -v tmux >/dev/null 2>&1; then
+#         TMUX_SESSION="${TMUX_SESSION:-works}"
+#         tmux has-session -t "$TMUX_SESSION" 2>/dev/null \
+#           && exec tmux attach -t "$TMUX_SESSION"
+#         exec tmux new -s "$TMUX_SESSION"
+#       fi
+#     ;;
+#   esac
+# fi
+
+# ---- WezTerm config auto-setup (no auto-launch) ----
+# 不整合を避けるため両パスに同内容を書き出し。SF Mono は参照しない。
+_wez_paths=("$HOME/.wezterm.lua" "$HOME/.config/wezterm/wezterm.lua")
+mkdir -p "$HOME/.config/wezterm"
+for _p in "${_wez_paths[@]}"; do : >"$_p"; done
+cat > "$HOME/.wezterm.lua" <<'LUA'
+local wezterm = require 'wezterm'
+local act = wezterm.action
+local bg = os.getenv("WEZTERM_BG") or ""   -- 任意：背景画像パス
+
+return {
+  -- フォント（SF Mono 非依存）
+  font = wezterm.font_with_fallback({
+    "Menlo", "JetBrains Mono", "FiraCode Nerd Font Mono", "Monaco",
+    "Noto Sans Mono CJK JP", "DejaVu Sans Mono"
+  }),
+  font_size = 13.0,
+  harfbuzz_features = { "liga=1", "clig=1", "calt=1" },
+
+  -- 見た目
+  color_scheme = "Tokyo Night Storm",
+  hide_tab_bar_if_only_one_tab = true,
+  use_fancy_tab_bar = true,
+  enable_scroll_bar = false,
+  -- タイトルバー（閉じる/最小化/最大化ボタン）を表示
+  window_decorations = "TITLE|RESIZE",
+  window_background_opacity = 0.93,
+  text_background_opacity   = 1.0,
+  macos_window_background_blur = 18,
+  inactive_pane_hsb = { saturation = 0.9, brightness = 0.55 },
+  window_padding = { left = 6, right = 6, top = 6, bottom = 6 },
+
+  -- 背景画像（任意）
+  window_background_image = (bg ~= "" and bg or nil),
+  window_background_image_hsb = (bg ~= "" and { brightness = 0.08, hue = 1.0, saturation = 1.0 } or nil),
+
+  -- キーバインド
+  keys = {
+    -- Copy/Paste（Cmd）
+    { key = "c", mods = "CMD",  action = act.CopyTo "Clipboard" },
+    { key = "v", mods = "CMD",  action = act.PasteFrom "Clipboard" },
+
+    -- 分割: Ctrl+h(水平) / Ctrl+v(垂直)
+    { key = "h",         mods = "CTRL", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } },
+    { key = "Backspace", mods = "CTRL", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } }, -- ^H対策
+    { key = "b",         mods = "CTRL", action = act.SplitVertical   { domain = "CurrentPaneDomain" } },
+
+    -- タブ
+    { key = "t", mods = "CMD", action = act.SpawnTab "CurrentPaneDomain" },
+    { key = "w", mods = "CMD", action = act.CloseCurrentTab { confirm = true } },
+    { key = "q", mods = "CMD", action = act.QuitApplication },
+  },
+
+  check_for_updates = false,
+}
+LUA
+# 同じ内容を ~/.config/wezterm/wezterm.lua にも反映
+cp -f "$HOME/.wezterm.lua" "$HOME/.config/wezterm/wezterm.lua" 2>/dev/null || true
+
+# ---- zsh: Bracketed Paste を全体で無効 ----
 disable_bracketed_paste() { printf '\e[?2004l'; }
 autoload -Uz add-zsh-hook 2>/dev/null || true
 add-zsh-hook precmd disable_bracketed_paste
 add-zsh-hook preexec disable_bracketed_paste
 zle -N bracketed-paste self-insert 2>/dev/null || true
 
+# ---- zsh: カラー強化（在れば自動）----
+# Homebrew: brew install zsh-syntax-highlighting zsh-autosuggestions
+if [ -r /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+  source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+fi
+if [ -r /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+  source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+  ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#6b7280'  # subtle gray
+fi
 
+# ---- カラープロンプト（Git ブランチ/dirty 表示）----
+autoload -Uz vcs_info
+zstyle ':vcs_info:git:*' formats '(%b%u%c)'
+precmd() { vcs_info }
+setopt PROMPT_SUBST
+PROMPT='%F{81}%n%f@%F{75}%m%f %F{117}%~%f ${vcs_info_msg_0_:+%F{180}$vcs_info_msg_0_%f}
+%F{34}➜%f '
 
-##### ============================================
-##### Kali-on-macOS helper ~/.zshrc (Fixed)
-#####  - X11 (XQuartz+socat), 永続/クリーン, Burp wrapper
-#####  - VPN共有: NAT(utun)+rdr(1234/TCP) ON/OFF/RESET
-#####  - pf完全停止の緊急復旧付き
-##### ============================================
+# ls や grep をカラー出力
+export CLICOLOR=1
+export LSCOLORS=ExFxBxDxCxegedabagacad
+export GREP_OPTIONS='--color=auto'
+export GREP_COLOR='1;32'
 
-##### ---- PATHs ----
-export PATH="$PATH:/opt/homebrew/opt/openvpn/sbin:/opt/X11/bin:/opt/homebrew/bin"
+# ==========================================================
+# 以降は「Kali-on-macOS helper」ブロック（省略せずそのまま）
+# ==========================================================
 
 ##### ---- cleanup (idempotent) ----
 for a in container-pentest-clean container-pentest cpentest cpentest-clean \
@@ -44,6 +135,9 @@ unset -f container_pentest_clean container_pentest \
           vpn-share-on vpn-share-off vpn-share-reset vpn-share-status \
           rshell-open rshell-close pf-panic-reset 2>/dev/null
 unset _tool_bootstrap 2>/dev/null
+
+##### ---- PATHs ----
+export PATH="$PATH:/opt/homebrew/opt/openvpn/sbin:/opt/X11/bin:/opt/homebrew/bin"
 
 ##### ---- host ip ----
 _host_ip() {
@@ -78,7 +172,7 @@ __apt_vols(){
   fi; printf "%s " "${vols[@]}"
 }
 
-##### ---- bootstrap inside Kali ----
+##### ---- bootstrap inside Kali (container CLEAN/PERSIST setup) ----
 read -r -d '' _tool_bootstrap <<'EOS'
 set -e; umask 022
 mkdir -p /var/cache/apt/archives /var/cache/apt/archives/partial /var/lib/apt/lists || true
@@ -89,7 +183,7 @@ if [ ! -f /root/.kali_bootstrapped ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt update -qq
   apt install -y --no-install-recommends \
-    ca-certificates curl wget gnupg git tmux zsh nano vim build-essential \
+    ca-certificates curl wget gnupg git zsh nano vim build-essential \
     python3 python3-pip python3-venv python3-full python3-dev pipx golang-go jq \
     unzip xz-utils file tree lsof procps net-tools iproute2 dnsutils \
     x11-apps fonts-noto \
