@@ -391,5 +391,7 @@ if [ -z "$ZSHRC_KALI_HINT_SHOWN" ]; then export ZSHRC_KALI_HINT_SHOWN=1; cat <<'
 - VPN共有 OFF:     vpn-share-off
 - pf 完全初期化:    vpn-share-reset
 - Kaliネット復旧:   （Kali内） net-repair
+- 分割: Ctrl+h(水平) / Ctrl+v(垂直) ※Ctrl+Backspace=水平
+- Cmd+C/Cmd+V コピー/ペースト
 HINT
 fi

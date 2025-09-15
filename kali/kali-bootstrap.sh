@@ -249,7 +249,7 @@ STUB
   done
   ok "tmux disabled"
 
-  # ---------- I. WezTerm 設定投入（Ctrl+H / Ctrl+V 分割、CmdC/V） ----------
+  # ---------- I. WezTerm 設定投入（Ctrl+H / Ctrl+B 分割, Copy/Paste） ----------
   step "Installing ~/.wezterm.lua for user ($MAIN_USER)"
   if [ -n "$MAIN_HOME" ]; then
     cat >"$MAIN_HOME/.wezterm.lua" <<'LUA'
@@ -269,7 +269,7 @@ return {
   hide_tab_bar_if_only_one_tab = true,
   use_fancy_tab_bar = true,
   enable_scroll_bar = false,
-  window_decorations = "TITLE|RESIZE",     -- タイトルバー表示（最小化/最大化/クローズ）
+  window_decorations = "TITLE|RESIZE",
   window_background_opacity = 0.92,
   text_background_opacity   = 1.0,
   inactive_pane_hsb = { saturation = 0.9, brightness = 0.55 },
@@ -279,13 +279,11 @@ return {
   window_background_image_hsb = (bg ~= "" and { brightness = 0.08, hue = 1.0, saturation = 1.0 } or nil),
 
   keys = {
-    -- Copy/Paste
-    -- { key = "c", mods = "SUPER",      action = act.CopyTo  "Clipboard" },
-    -- { key = "v", mods = "SUPER",      action = act.PasteFrom "Clipboard" },
+    -- Copy/Paste（Ctrl+Shift）
     { key = "c", mods = "CTRL|SHIFT", action = act.CopyTo  "Clipboard" },
     { key = "v", mods = "CTRL|SHIFT", action = act.PasteFrom "Clipboard" },
 
-    -- Split: Ctrl+H (horizontal), Ctrl+V (vertical)  ← ご指定どおり
+    -- Split: Ctrl+H (horizontal), Ctrl+B (vertical)
     { key = "h",         mods = "CTRL", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } },
     { key = "Backspace", mods = "CTRL", action = act.SplitHorizontal { domain = "CurrentPaneDomain" } }, -- ^H対策
     { key = "b",         mods = "CTRL", action = act.SplitVertical   { domain = "CurrentPaneDomain" } },
@@ -345,6 +343,32 @@ echo "[+] saved: $OUT"
 PFS
   chmod +x /usr/local/bin/proofshot
   ok "proofshot installed"
+
+  # ---------- K. ~/.zshrc へ on-load ヒントを冪等に追記 ----------
+  if [ -n "$MAIN_HOME" ]; then
+    step "Appending on-load helper hint into ~/.zshrc (idempotent)"
+    ZSHRC="$MAIN_HOME/.zshrc"
+    touch "$ZSHRC"
+    chown "$MAIN_USER":"$MAIN_USER" "$ZSHRC"
+    # 既に同趣旨のヒントがあれば追記しない（変数ガードで判定）
+    if ! grep -q 'ZSHRC_KALI_HINT_SHOWN' "$ZSHRC" 2>/dev/null; then
+      cat >>"$ZSHRC" <<'ZRC_HINT'
+
+##### ---- on-load hint ----
+if [ -z "$ZSHRC_KALI_HINT_SHOWN" ]; then export ZSHRC_KALI_HINT_SHOWN=1; cat <<'HINT'
+[helper]
+- Kaliネット復旧:   net-repair
+- 分割: Ctrl+h(水平) / Ctrl+b(垂直) ※Ctrl+Backspace=水平
+- コピー/ペースト: Ctrl+Shift+C / Ctrl+Shift+V
+HINT
+fi
+ZRC_HINT
+      chown "$MAIN_USER":"$MAIN_USER" "$ZSHRC"
+    else
+      note "~/.zshrc already has on-load hint; skipping append"
+    fi
+  fi
+  ok "on-load hint ensured"
 
   echo; ok "Bootstrap complete."
   echo "  - Relogin recommended (IME/xbindkeys)"
