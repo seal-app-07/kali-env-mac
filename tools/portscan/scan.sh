@@ -13,7 +13,7 @@ Options:
   -e <file>        Exclude hosts from file
   -o <dir>         Output directory (default: ./results/YYYYMMDD)
   -h               Show this help
-  -Pn		   Disable ping
+  -p		   Disable ping
 EOF
 }
 
@@ -30,7 +30,7 @@ failed_hosts="${outdir}/failed_${now}.txt"
 ping_disable=""
 
 # parse options
-while getopts "T:t:x:f:e:o:h:Pn" opt; do
+while getopts "T:t:x:f:e:o:h:p" opt; do
   case "$opt" in
     T) timing_template="-T${OPTARG}" ;;
     t) targets="${targets} $(echo "$OPTARG" | tr ',' ' ')" ;;
@@ -38,7 +38,7 @@ while getopts "T:t:x:f:e:o:h:Pn" opt; do
     f) [ -f "$OPTARG" ] && targets="${targets} $(cat "$OPTARG")" ;;
     e) [ -f "$OPTARG" ] && excludes="${excludes} $(cat "$OPTARG")" ;;
     o) outdir="$OPTARG" ;;
-    Pn) ping_disable="-Pn" ;;
+    p) ping_disable="-Pn" ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
