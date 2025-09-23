@@ -57,7 +57,7 @@ main(){
     gobuster ffuf feroxbuster dirb seclists wordlists \
     smbclient smbmap cifs-utils enum4linux-ng python3-impacket ldap-utils crackmapexec responder \
     metasploit-framework exploitdb sqlmap \
-    chisel sshuttle mitmproxy tcpdump
+    chisel sshuttle mitmproxy tcpdump obsidian flameshot burpsuite
   ok "Base toolchain installed"
 
   # ---------- A2. WezTerm repo ----------
