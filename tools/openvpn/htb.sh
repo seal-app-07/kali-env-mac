@@ -66,7 +66,7 @@ connect(){
   testCipherSwitchNeeded() { grep -qioE "cipher AES-256-CBC" "$ovpn"; }
 
   # 非対話でログのみ
-  openvpn "$ovpn" </dev/null &>"$ovpnoutput" &
+  sudo openvpn "$ovpn" </dev/null &>"$ovpnoutput" &
   colour process "[+] Connecting with OpenVPN..." 8
 
   for i in 1 2; do
