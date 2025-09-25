@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smb_enum.sh - SMB enumeration (smbclient + enum4linux)
+# scan.sh - SMB enumeration (smbclient + enum4linux)
 # Console keeps colors; log is plain (ANSI stripped).
 set -euo pipefail
 IFS=$'\n\t'
@@ -39,7 +39,7 @@ else
        2> >(tee >(sed -u -E  's/\x1B\[[0-9;]*[ -/]*[@-~]//g' >>"$LOG") >&2)
 fi
 
-echo "=== smb_enum.sh ==="
+echo "=== scan.sh ==="
 echo "Target: $TARGET"
 echo "Outdir: $OUTDIR"
 echo "--- start: $(date) ---"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# port_scan.sh - rustscan -> nmap pipeline
+# scan.sh - rustscan -> nmap pipeline
 # Console shows original colors; log is color-stripped (plain text).
 set -euo pipefail
 IFS=$'\n\t'
@@ -61,7 +61,7 @@ else                                    # BSD/macOS sed
        2> >(tee >(sed -u -E  's/\x1B\[[0-9;]*[ -/]*[@-~]//g' >>"$LOG") >&2)
 fi
 
-echo "=== port_scan.sh ==="
+echo "=== scan.sh ==="
 echo "Script dir: $SCRIPT_DIR"
 echo "Target: $TARGET"
 echo "Outdir: $OUTDIR"
@@ -118,12 +118,12 @@ fi
 run_cmd "$NMAP_CMD"
 
 # ---- 5) Optional full nmap ----
-if [ "$FULL" = true ]; then
-  FULL_NMAP_CMD="nmap -p- -Pn -n -sS -sV -oN ${OUTDIR}/nmap_full.nmap ${TARGET}"
-  [ "$RUN_SCRIPTS" = true ] && FULL_NMAP_CMD="${FULL_NMAP_CMD} -sC --script=vuln"
-  [ "$OS_DETECT" = true ] && FULL_NMAP_CMD="sudo ${FULL_NMAP_CMD}"
-  run_cmd "$FULL_NMAP_CMD"
-fi
+# if [ "$FULL" = true ]; then
+#   FULL_NMAP_CMD="nmap -p- -Pn -n -sS -sV -oN ${OUTDIR}/nmap_full.nmap ${TARGET}"
+#   [ "$RUN_SCRIPTS" = true ] && FULL_NMAP_CMD="${FULL_NMAP_CMD} -sC --script=vuln"
+#   [ "$OS_DETECT" = true ] && FULL_NMAP_CMD="sudo ${FULL_NMAP_CMD}"
+#   run_cmd "$FULL_NMAP_CMD"
+# fi
 
 echo "--- end: $(date) ---"
 echo "[*] Outputs saved in: $OUTDIR"

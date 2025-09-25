@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# web_enum.sh - HTTP(S) enumeration (headers + gobuster)
+# scan.sh - HTTP(S) enumeration (headers + gobuster)
 # Console keeps colors; log is plain (ANSI stripped).
 set -euo pipefail
 IFS=$'\n\t'
@@ -47,7 +47,7 @@ else
        2> >(tee >(sed -u -E  's/\x1B\[[0-9;]*[ -/]*[@-~]//g' >>"$LOG") >&2)
 fi
 
-echo "=== web_enum.sh ==="
+echo "=== scan.sh ==="
 echo "Target: $TARGET"
 echo "Ports: $PORTS"
 echo "Outdir: $OUTDIR"
