@@ -57,7 +57,7 @@ main(){
     gobuster ffuf feroxbuster dirb seclists wordlists \
     smbclient smbmap cifs-utils enum4linux-ng python3-impacket ldap-utils crackmapexec responder \
     metasploit-framework exploitdb sqlmap \
-    chisel sshuttle mitmproxy tcpdump obsidian flameshot burpsuite cargo ffuf
+    chisel sshuttle mitmproxy tcpdump obsidian flameshot burpsuite cargo rlwrap
   cargo install rustscan
   echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
   source ~/.zshrc
